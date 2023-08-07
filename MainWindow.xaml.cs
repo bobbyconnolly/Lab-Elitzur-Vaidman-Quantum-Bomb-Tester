@@ -30,7 +30,12 @@ namespace Lab_Elitzur_Vaidman_Quantum_Bomb_Tester
 
         private void Button_Click(object sender, RoutedEventArgs e)
         {
-            _experiment.Run();
+            _experiment.Run(isExperimentWithBomb: chkWithBomb.IsChecked ?? false);
+        }
+
+        private void CheckBox_Checked(object sender, RoutedEventArgs e)
+        {
+
         }
     }
 }

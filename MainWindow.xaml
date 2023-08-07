@@ -7,8 +7,8 @@
         mc:Ignorable="d"
         Title="MainWindow" Height="450" Width="800">
     <Grid>
-        <Canvas x:Name="canvas"/>
-        <Button x:Name="btStart" Content="Start Experiment" HorizontalAlignment="Left" Margin="528,318,0,0" VerticalAlignment="Top" Height="49" Width="164" Click="Button_Click"/>
-
+        <Canvas x:Name="canvas" Margin="0,0,0,66" />
+        <Button x:Name="btStart" Content="Start Experiment" Margin="0,0,223,17" Click="Button_Click" HorizontalAlignment="Right" Width="164" Height="43" VerticalAlignment="Bottom"/>
+        <CheckBox x:Name="chkWithBomb" Content="With Bomb" Canvas.Left="585" Canvas.Top="389" Checked="CheckBox_Checked" IsChecked="False" Margin="0,0,87,16" VerticalContentAlignment="Center" Height="44" VerticalAlignment="Bottom" HorizontalAlignment="Right" Width="131"/>
     </Grid>
 </Window>
