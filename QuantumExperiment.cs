@@ -24,11 +24,17 @@ using System.Windows.Threading;
  * 
  * 6) Add your own features. Use your creativity.
  * 
+ * 7) Add guard clauses (i.e.: throw new InvalidOperationException) in order to remove all the non-null assertions (!) scattered throughout the code
+ * 
+ * 8) Make any other improvements to the readability of the code (separate portions of the code into different files perhaps, or refactor some parts of the code, etc...)
+ * 
+ * 9) Prevent the user for clicking the button while the experiment is running by implementing a kind of lockout
+ * 
  */
 
 public class QuantumExperiment
 {
-    // All positions correspond to the entity's centroid
+    // Positions correspond to the entity's centroid
     private const double PHOTON_SIZE = 10;
     private const double PHOTON_VELOCITY = 0.3;
 
@@ -216,7 +222,7 @@ public class QuantumExperiment
         {
             if (_hasDetectedPhoton)
             {
-                base.Shape.Fill = new SolidColorBrush(_color); // Change to dark color
+                base.Shape.Fill = new SolidColorBrush(_color); // Change to dark color (the detectors start off as a lightened version of this color)
             }
         }
     }
@@ -270,7 +276,7 @@ public class QuantumExperiment
         _detectorA = AddDetector(new Point(DETECTOR_A_X, DETECTOR_A_Y), Colors.Green);
         _detectorB = AddDetector(new Point(DETECTOR_B_X, DETECTOR_B_Y), Colors.Red);
 
-        // TODO: Fix "pyramid of doom" callback hell by using events/delegates instead
+        // TODO: Fix "pyramid of doom" callback hell by using C# events instead
         MoveInitialPhotonToBeamSplitter(() =>
         {
             Debug.WriteLine("Photon reached the beam splitter!");
@@ -405,7 +411,7 @@ public class QuantumExperiment
             {
                 _photonsArrivedCounter = 0;
 
-                // NOTE: These are representations of superposed photons and their paths are indeterminate until observed.
+                // NOTE: As these photons are in a state of superposition, their definitive paths remain ambiguous until an observation is made, especially when a bomb is introduced to the experiment.
                 MoveLowerPhotonToDetectorA(() =>
                 {
                     PhotonArrivedAtDetector();
@@ -423,6 +429,7 @@ public class QuantumExperiment
 
                 _recombinedPhoton = AddPhoton(_recombinator!.GetCentroid(), isSuperposed: false);
 
+                // NOTE: In the absence of a bomb, the superposed photons consistently exhibit destructive interference towards detector B and constructive interference towards detector A (which is in their original direction).
                 MoveRecombinedPhotonToDetectorA(() =>
                 {
                     _recombinedPhoton!.Kill();
@@ -454,7 +461,7 @@ public class QuantumExperiment
         if (_photonsArrivedCounter == 1) // First photon arrived
         {
             _waitForOtherPhotonTimer = new DispatcherTimer();
-            _waitForOtherPhotonTimer.Interval = TimeSpan.FromMilliseconds(100); // 100 ms, adjust as needed
+            _waitForOtherPhotonTimer.Interval = TimeSpan.FromMilliseconds(100); // NOTE: We're using a 100 ms interval for the timer, which should be sufficient given a frame rate of 60 FPS. However, there's a potential for minor visual inconsistencies or "jankiness" due to this timing. Adjust as needed to improve smoothness if necessary.
             _waitForOtherPhotonTimer.Tick += (sender, args) => throw new Exception("Only one photon arrived within the time frame!");
             _waitForOtherPhotonTimer.Start();
         }
@@ -471,11 +478,12 @@ public class QuantumExperiment
 
             if (_bomb!.IsBombLive == false)
             {
+                // When the bomb is a dud, the photon behavior resembles the scenario without any bomb: it consistently gets detected at Detector A due to interference.
                 DetectedAtDetectorA();
-                return;
             }
             else
             {
+                // When the bomb is live, and the photon reaches this point via the upper path, the detection becomes probabilistic: a 50-50 split between Detectors A and B. Detection at A is inconclusive regarding the bomb's state. However, detection at B confirms the bomb is live.
                 if (_random.Next(2) == 0)
                 {
                     DetectedAtDetectorA();
