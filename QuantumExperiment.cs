@@ -9,6 +9,23 @@ using System.Windows.Media.Animation;
 using System.Windows.Shapes;
 using System.Windows.Threading;
 
+// TODO
+/**
+ * 
+ * 1) If the bomb explodes, replace it with an explosion symbol
+ * 
+ * 2) Add labels to the various components
+ * 
+ * 3) Add a label above the bomb that shows either "?" or "Is Live!" depending on whether it's detected in A or B, respectively
+ * 
+ * 4) Add a table that gathers the results so that an analysis of the data can be performed. This tabled should exist outside the canvas. (Hint: use listbox or datagridview)
+ * 
+ * 5) Fix the pyramid of doom (ugly nested callback functions) by making use of C# events
+ * 
+ * 6) Add your own features. Use your creativity.
+ * 
+ */
+
 public class QuantumExperiment
 {
     // All positions correspond to the entity's centroid
