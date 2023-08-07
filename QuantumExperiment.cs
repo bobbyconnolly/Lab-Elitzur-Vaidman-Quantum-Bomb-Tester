@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -13,6 +14,9 @@ public class QuantumExperiment
     // All positions correspond to the entity's centroid
     private const double PHOTON_SIZE = 10;
     private const double PHOTON_VELOCITY = 0.3;
+
+    private const double PHOTON_ACTUAL_PATH_THICKNESS = 3.0;
+    private const double PHOTON_SUPERPOSED_PATH_THICKNESS = 2.0;
 
     private const double INITIAL_PHOTON_X = 100;
     private const double INITIAL_PHOTON_Y = 300;
@@ -136,17 +140,17 @@ public class QuantumExperiment
 
     public class Photon : RenderableEntity
     {
-        bool _isFaded;
+        bool _isSuperposed;
         bool _isDead;
 
-        public Photon(Shape shape, Canvas canvas, double x, double y, bool isFaded) : base(shape, canvas, x, y)
+        public Photon(Shape shape, Canvas canvas, double x, double y, bool isSuperposed) : base(shape, canvas, x, y)
         {
-            _isFaded = isFaded;
+            _isSuperposed = isSuperposed;
         }
 
-        public bool IsFaded
+        public bool IsSuperposed
         {
-            get { return _isFaded; }
+            get { return _isSuperposed; }
         }
 
         public bool IsDead
@@ -211,6 +215,8 @@ public class QuantumExperiment
         // Clear the canvas
         _canvas.Children.Clear();
 
+        _photonPaths.Clear();
+
         // Clear the active photons list
         _photonsArrivedCounter = 0;
 
@@ -233,7 +239,7 @@ public class QuantumExperiment
 
         AddPhotonSourceSymbol(new Point(INITIAL_PHOTON_X, INITIAL_PHOTON_Y));
 
-        _initialPhoton = AddPhoton(new Point(INITIAL_PHOTON_X, INITIAL_PHOTON_Y), isFaded: false);
+        _initialPhoton = AddPhoton(new Point(INITIAL_PHOTON_X, INITIAL_PHOTON_Y), isSuperposed: false);
         _beamSplitter = AddBeamSplitter(new Point(BEAM_SPLITTER_X, BEAM_SPLITTER_Y));
 
         if (_isExperimentWithBomb)
@@ -254,8 +260,8 @@ public class QuantumExperiment
 
             // Replace the photon with two photons in a state of quantum superposition
             _initialPhoton.Kill();
-            _upperPhoton = AddPhoton(new Point(BEAM_SPLITTER_X, BEAM_SPLITTER_Y), isFaded: true);
-            _lowerPhoton = AddPhoton(new Point(BEAM_SPLITTER_X, BEAM_SPLITTER_Y), isFaded: true);
+            _upperPhoton = AddPhoton(new Point(BEAM_SPLITTER_X, BEAM_SPLITTER_Y), isSuperposed: true);
+            _lowerPhoton = AddPhoton(new Point(BEAM_SPLITTER_X, BEAM_SPLITTER_Y), isSuperposed: true);
 
             MoveUpperPhotonToMirror(() =>
             {
@@ -307,27 +313,27 @@ public class QuantumExperiment
 
     public void MoveInitialPhotonToBeamSplitter(Action callback)
     {
-        AnimatePhoton(_initialPhoton!, _beamSplitter!.GetCentroid(), (_beamSplitter.CentroidX - _initialPhoton!.CentroidX) / PHOTON_VELOCITY, callback);
+        AnimatePhoton(_initialPhoton!, _beamSplitter!.GetCentroid(), (_beamSplitter.CentroidX - _initialPhoton!.CentroidX) / PHOTON_VELOCITY, "initial", callback);
     }
 
     public void MoveUpperPhotonToMirror(Action callback)
     {
-        AnimatePhoton(_upperPhoton!, _upperPathMirror!.GetCentroid(), (-1) * (_upperPathMirror.CentroidY - _beamSplitter!.CentroidY) / PHOTON_VELOCITY, callback);
+        AnimatePhoton(_upperPhoton!, _upperPathMirror!.GetCentroid(), (-1) * (_upperPathMirror.CentroidY - _beamSplitter!.CentroidY) / PHOTON_VELOCITY, "upper", callback);
     }
 
     public void MoveLowerPhotonToBomb(Action callback)
     {
-        AnimatePhoton(_lowerPhoton!, _bomb!.GetCentroid(), (_bomb.CentroidX - _beamSplitter!.CentroidX) / PHOTON_VELOCITY, callback);
+        AnimatePhoton(_lowerPhoton!, _bomb!.GetCentroid(), (_bomb.CentroidX - _beamSplitter!.CentroidX) / PHOTON_VELOCITY, "lower", callback);
     }
 
     public void MoveUpperPhotonToRecombinator(Action callback)
     {
-        AnimatePhoton(_upperPhoton!, _recombinator!.GetCentroid(), (_recombinator.CentroidX - _upperPathMirror!.CentroidX) / PHOTON_VELOCITY, callback);
+        AnimatePhoton(_upperPhoton!, _recombinator!.GetCentroid(), (_recombinator.CentroidX - _upperPathMirror!.CentroidX) / PHOTON_VELOCITY, "upper", callback);
     }
 
     public void MoveLowerPhotonFromBeamSplitterToMirror(Action callback)
     {
-        AnimatePhoton(_lowerPhoton!, _lowerPathMirror!.GetCentroid(), (_lowerPathMirror!.CentroidX - _beamSplitter!.CentroidX) / PHOTON_VELOCITY, callback);
+        AnimatePhoton(_lowerPhoton!, _lowerPathMirror!.GetCentroid(), (_lowerPathMirror!.CentroidX - _beamSplitter!.CentroidX) / PHOTON_VELOCITY, "lower", callback);
     }
 
     public void MoveLowerPhotonFromBombToMirror(Action callback)
@@ -339,16 +345,22 @@ public class QuantumExperiment
             _lowerPhoton!.Kill();
             _upperPhoton!.Kill();
             _upperPhoton.IsDead = true;
+
+            _canvas.Children.Remove(_photonPaths.Where(p => p.PathName == "upper").Last().Polyline);
+            var polyline = _photonPaths.Where(p => p.PathName == "lower").Last().Polyline;
+            polyline.Stroke = Brushes.Magenta;
+            polyline.StrokeThickness = PHOTON_ACTUAL_PATH_THICKNESS;
+            polyline.StrokeDashArray = null;
         }
         else
         {
-            AnimatePhoton(_lowerPhoton!, _lowerPathMirror!.GetCentroid(), (_lowerPathMirror!.CentroidX - _bomb!.CentroidX) / PHOTON_VELOCITY, callback);
+            AnimatePhoton(_lowerPhoton!, _lowerPathMirror!.GetCentroid(), (_lowerPathMirror!.CentroidX - _bomb!.CentroidX) / PHOTON_VELOCITY, "lower", callback);
         }
     }
 
     public void MoveLowerPhotonToRecombinator(Action callback)
     {
-        AnimatePhoton(_lowerPhoton!, _recombinator!.GetCentroid(), (-1) * (_recombinator!.CentroidY - _lowerPathMirror!.CentroidY) / PHOTON_VELOCITY, callback);
+        AnimatePhoton(_lowerPhoton!, _recombinator!.GetCentroid(), (-1) * (_recombinator!.CentroidY - _lowerPathMirror!.CentroidY) / PHOTON_VELOCITY, "lower", callback);
     }
 
     private void PhotonArrivedAtRecombinator()
@@ -376,7 +388,7 @@ public class QuantumExperiment
             {
                 _photonsArrivedCounter = 0;
 
-                // NOTE: Visually, we arbitrarily choose which photon (upper/lower) goes to detector A or B. In reality, these are representations of superposed photons and their paths are indeterminate until observed.
+                // NOTE: These are representations of superposed photons and their paths are indeterminate until observed.
                 MoveLowerPhotonToDetectorA(() =>
                 {
                     PhotonArrivedAtDetector();
@@ -392,7 +404,7 @@ public class QuantumExperiment
                 _upperPhoton!.Kill();
                 _lowerPhoton!.Kill();
 
-                _recombinedPhoton = AddPhoton(_recombinator!.GetCentroid(), isFaded: false);
+                _recombinedPhoton = AddPhoton(_recombinator!.GetCentroid(), isSuperposed: false);
 
                 MoveRecombinedPhotonToDetectorA(() =>
                 {
@@ -405,17 +417,17 @@ public class QuantumExperiment
 
     public void MoveUpperPhotonToDetectorB(Action callback)
     {
-        AnimatePhoton(_upperPhoton!, _detectorB!.GetCentroid(), (-1) * (_detectorB!.CentroidY - _recombinator!.CentroidY) / PHOTON_VELOCITY, callback);
+        AnimatePhoton(_upperPhoton!, _detectorB!.GetCentroid(), (-1) * (_detectorB!.CentroidY - _recombinator!.CentroidY) / PHOTON_VELOCITY, "upper", callback);
     }
 
     public void MoveLowerPhotonToDetectorA(Action callback)
     {
-        AnimatePhoton(_lowerPhoton!, _detectorA!.GetCentroid(), (_detectorA!.CentroidX - _recombinator!.CentroidX) / PHOTON_VELOCITY, callback);
+        AnimatePhoton(_lowerPhoton!, _detectorA!.GetCentroid(), (_detectorA!.CentroidX - _recombinator!.CentroidX) / PHOTON_VELOCITY, "lower", callback);
     }
 
     public void MoveRecombinedPhotonToDetectorA(Action callback)
     {
-        AnimatePhoton(_recombinedPhoton!, _detectorA!.GetCentroid(), (_detectorA!.CentroidX - _recombinator!.CentroidX) / PHOTON_VELOCITY, callback);
+        AnimatePhoton(_recombinedPhoton!, _detectorA!.GetCentroid(), (_detectorA!.CentroidX - _recombinator!.CentroidX) / PHOTON_VELOCITY, "recombined", callback);
     }
 
     private void PhotonArrivedAtDetector()
@@ -442,24 +454,52 @@ public class QuantumExperiment
 
             if (_bomb!.IsBombLive == false)
             {
-                Debug.WriteLine("Detected at A, you don't know if the bomb is live or a dud");
-                _detectorA!.HasDetectedPhoton = true;
+                DetectedAtDetectorA();
                 return;
             }
             else
             {
                 if (_random.Next(2) == 0)
                 {
-                    Debug.WriteLine("Detected at A, you don't know if the bomb is live or a dud");
-                    _detectorA!.HasDetectedPhoton = true;
-                } 
+                    DetectedAtDetectorA();
+                }
                 else
                 {
-                    Debug.WriteLine("Detected at B, bomb is live AND didn't explode (photon took upper path)");
-                    _detectorB!.HasDetectedPhoton = true;
+                    DetectedAtDetectorB();
                 }
             }
+        }
+    }
 
+    private void DetectedAtDetectorA()
+    {
+        Debug.WriteLine("Detected at A, you don't know if the bomb is live or a dud");
+
+        _detectorA!.HasDetectedPhoton = true;
+
+        _canvas.Children.Remove(_photonPaths.Where(p => p.PathName == "upper").Last().Polyline);
+        var polyline = _photonPaths.Where(p => p.PathName == "lower").Last().Polyline;
+        polyline.Stroke = Brushes.Magenta;
+        polyline.StrokeThickness = PHOTON_ACTUAL_PATH_THICKNESS;
+        polyline.StrokeDashArray = null;
+    }
+
+    private void DetectedAtDetectorB()
+    {
+        Debug.WriteLine("Detected at B, bomb is LIVE and didn't explode. Photon took upper path. That's interesting!");
+
+        _detectorB!.HasDetectedPhoton = true;
+
+        foreach (PhotonPath photonPath in _photonPaths.Where(p => p.PathName == "lower"))
+        {
+            _canvas.Children.Remove(photonPath.Polyline);
+        }
+
+        foreach (PhotonPath photonPath in _photonPaths.Where(p => p.PathName == "upper"))
+        {
+            photonPath.Polyline.Stroke = Brushes.Magenta;
+            photonPath.Polyline.StrokeThickness = PHOTON_ACTUAL_PATH_THICKNESS;
+            photonPath.Polyline.StrokeDashArray = null;
         }
     }
 
@@ -495,16 +535,16 @@ public class QuantumExperiment
         return new RenderableEntity(sourcePath, _canvas, centroid.X, centroid.Y);
     }
 
-    private Photon AddPhoton(Point centroid, bool isFaded)
+    private Photon AddPhoton(Point centroid, bool isSuperposed)
     {
         Ellipse photon = new Ellipse
         {
             Width = PHOTON_SIZE,
             Height = PHOTON_SIZE,
-            Fill = isFaded ? new SolidColorBrush(LightenColor(Brushes.Magenta.Color, 0.6)) : Brushes.Magenta
+            Fill = isSuperposed ? new SolidColorBrush(LightenColor(Brushes.Magenta.Color, 0.6)) : Brushes.Magenta
         };
 
-        return new Photon(photon, _canvas, centroid.X, centroid.Y, isFaded);
+        return new Photon(photon, _canvas, centroid.X, centroid.Y, isSuperposed);
     }
 
     private Color LightenColor(Color originalColor, double factor)
@@ -577,7 +617,15 @@ public class QuantumExperiment
         return new Detector(mirror, _canvas, centroid.X, centroid.Y, color);
     }
 
-    private void AnimatePhoton(Photon photon, Point targetPosition, double durationMilliseconds, Action? onComplete = null)
+    private struct PhotonPath
+    {
+        public string PathName { get; set; }
+        public Polyline Polyline { get; set; }
+    }
+
+    private List<PhotonPath> _photonPaths = new List<PhotonPath>();
+
+    private void AnimatePhoton(Photon photon, Point targetPosition, double durationMilliseconds, string pathName, Action? onComplete = null)
     {
         // This timer will fire every frame
         var timer = new DispatcherTimer
@@ -590,13 +638,16 @@ public class QuantumExperiment
         var stopwatch = new Stopwatch();
 
         // Create a new Polyline for the photon's path (dashed line)
-        var pathDashed = new Polyline
+        var polyline = new Polyline
         {
-            Stroke = photon.IsFaded ? new SolidColorBrush(LightenColor(Brushes.Magenta.Color, 0.6)) : Brushes.Magenta,
-            StrokeThickness = photon.IsFaded ? 2.0 : 3.0,
-            StrokeDashArray = new DoubleCollection { 1.5, 2.0 }
+            Stroke = photon.IsSuperposed ? new SolidColorBrush(LightenColor(Brushes.Magenta.Color, 0.6)) : Brushes.Magenta,
+            StrokeThickness = photon.IsSuperposed ? PHOTON_SUPERPOSED_PATH_THICKNESS : PHOTON_ACTUAL_PATH_THICKNESS,
+            StrokeDashArray = photon.IsSuperposed ? new DoubleCollection { 1.5, 2.0 } : null
         };
-        _canvas.Children.Add(pathDashed);
+        
+        _photonPaths.Add(new PhotonPath { PathName = pathName, Polyline = polyline });
+        
+        _canvas.Children.Add(polyline);
 
         timer.Tick += (sender, args) =>
         {
@@ -619,7 +670,7 @@ public class QuantumExperiment
 
             // Add a new point to the Polyline at the photon's current position
             var newPoint = new Point(newX, newY);
-            pathDashed.Points.Add(newPoint);
+            polyline.Points.Add(newPoint);
 
             // Stop the timer and the animation when we're done
             if (progress >= 1.0)
