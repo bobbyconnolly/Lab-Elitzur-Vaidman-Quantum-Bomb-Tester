@@ -9,8 +9,32 @@ using System.Windows.Media.Animation;
 using System.Windows.Shapes;
 using System.Windows.Threading;
 
-// TODO
 /**
+ * The Elitzur-Vaidman bomb tester
+ * 
+ * Let's break it down step by step:
+ * 
+ * 1. Initialization: There's a 50/50 chance the bomb is live or a dud.
+ * 
+ * 2. Photon Path Selection: A photon can take either the upper or lower path with equal probability.
+ * 
+ * 3. Photon Takes Lower Path:
+ * 
+ *    • Bomb is Live: The photon triggers the bomb and gets detected there.
+ * 
+ *    • Bomb is Dud: The photon doesn't trigger anything and continues on its path.
+ * 
+ * 4. Photon Takes Upper Path:
+ * 
+ *    • After reflecting off the mirror on the upper path, it heads toward the recombinator (or second beam splitter).
+ * 
+ *    • Bomb is Dud: Due to quantum interference (as a result of the photon's superposition state with its counterpart on the lower path), the photon will always emerge toward detector A.
+ * 
+ *    • Bomb is Live: Since the lower-path photon was absorbed by the bomb, no interference occurs. Therefore, the upper photon has a 50/50 chance of going to either detector A or detector B when it reaches the recombinator.
+ * 
+ * 
+ * 
+ * TODO :
  * 
  * 1) If the bomb explodes, replace it with an explosion symbol
  * 
