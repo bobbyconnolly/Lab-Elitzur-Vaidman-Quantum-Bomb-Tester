@@ -5,106 +5,52 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
-using System.Windows.Media.Animation;
 using System.Windows.Shapes;
 using System.Windows.Threading;
 
-/**
- * The Elitzur-Vaidman bomb tester
- * 
- * Let's break it down step by step:
- * 
- * 1. Initialization: There's a 50/50 chance the bomb is live or a dud.
- * 
- * 2. Photon Path Selection: A photon can take either the upper or lower path with equal probability.
- * 
- * 3. Photon Takes Lower Path:
- * 
- *    • Bomb is Live: The photon triggers the bomb and gets detected there.
- * 
- *    • Bomb is Dud: The photon doesn't trigger anything and continues on its path.
- * 
- * 4. Photon Takes Upper Path:
- * 
- *    • After reflecting off the mirror on the upper path, it heads toward the recombinator (or second beam splitter).
- * 
- *    • Bomb is Dud: Due to quantum interference (as a result of the photon's superposition state with its counterpart on the lower path), the photon will always emerge toward detector A.
- * 
- *    • Bomb is Live: Since the lower-path photon was absorbed by the bomb, no interference occurs. Therefore, the upper photon has a 50/50 chance of going to either detector A or detector B when it reaches the recombinator.
- * 
- * 
- * 
- * TODO :
- * 
- * 1) Animation Mistake Alert: Currently, upon photon detection at detector B (the red one), we remove all dashed lines. This is incorrect. The segment of the dashed line between the initial beam splitter and the bomb should remain intact.
- * 
- * 2) If the bomb explodes, replace it with an explosion symbol
- * 
- * 3) Label Components: Add textual labels to various parts of the graphic. Examples include "Detector A", "Detector B", "Mirror", "Beam Splitter", "Photon Source", etc.
- * 
- * 4) Add a label above the bomb that shows either "Possibly a dud" or "It's live!" depending on whether it's detected in A or B, respectively
- * 
- * 5) Data Analysis Table: Set up a table outside the canvas to analyze the results. The table should have two columns: "Trial #" (a sequential number) and "Result" (possible values: "A", "B", "Boom!").
- * 
- * 6) Refactor Callbacks: Reduce the deeply nested callback functions by leveraging C# events. This will help improve the code's readability and maintainability.
- * 
- * 7) Add your own features. Use your creativity.
- * 
- * 8) Add guard clauses (i.e.: throw new InvalidOperationException) in order to remove all the non-null assertions (!) scattered throughout the code
- * 
- * 9) Make any other improvements to the readability of the code (separate portions of the code into different files perhaps, or refactor some parts of the code, etc...)
- * 
- * 10) User Interaction Lockout: Implement a mechanism to prevent users from triggering the experiment while it's running. Some potential solutions:
- *     • Disable the start button until the experiment concludes.
- *     • Display a visual indicator (like a loading spinner) to signify experiment progress.
- *     • Overlay a translucent layer over the experiment UI.
- *     • Show a warning pop-up if the user tries to interact mid-experiment.
- * 
- */
-
 public class QuantumExperiment
 {
-    // Position values (X, Y) correspond to an entity's centroid
-    private const double PHOTON_SIZE = 10;
-    private const double PHOTON_VELOCITY = 0.3;
+    // Nested Struct for PhotonPath
+    private struct PhotonPath
+    {
+        public string PathName { get; set; }
+        public Polyline Polyline { get; set; }
+    }
 
+    // Constants for Animation and Photon Characteristics
+    private const double ANIMATION_FPS = 60.0;
+    private const double PHOTON_SIZE = 10;
+    private const double PHOTON_VELOCITY = 0.8;
     private const double PHOTON_ACTUAL_PATH_THICKNESS = 3.0;
     private const double PHOTON_SUPERPOSITION_PATH_THICKNESS = 2.0;
 
+    // Constants for Experiment Component Positions and Dimensions
     private const double INITIAL_PHOTON_X = 100;
     private const double INITIAL_PHOTON_Y = 300;
-
     private const double BEAM_SPLITTER_X = 200;
     private const double BEAM_SPLITTER_Y = 300;
     private const double BEAM_SPLITTER_WIDTH = 5; 
     private const double BEAM_SPLITTER_HEIGHT = 20;
-
     private const double BOMB_X = 300;
     private const double BOMB_Y = 300;
     private const double BOMB_SIZE = 20;
-
     private const double TOP_MIRROR_X = 200;
     private const double TOP_MIRROR_Y = 150;
     private const double BOTTOM_MIRROR_X = 500;
     private const double BOTTOM_MIRROR_Y = 300;
     private const double MIRROR_WIDTH = 5;
     private const double MIRROR_HEIGHT = 20;
-
     private const double RECOMBINATOR_X = 500;
     private const double RECOMBINATOR_Y = 150;
-
     private const double DETECTOR_A_X = 600;
     private const double DETECTOR_A_Y = 150;
     private const double DETECTOR_B_X = 500;
     private const double DETECTOR_B_Y = 50;
     private const double DETECTOR_SIZE = 20;
 
-    private bool _isExperimentWithBomb;
-    private bool _didPhotonActuallyTakeLowerPath;
-     
-    private int _photonsArrivedCounter;
-    private DispatcherTimer? _waitForOtherPhotonTimer;
-
+    // Experiment components
+    // The '?' denotes nullable types, allowing these references to be null, offering flexibility during initialization and runtime scenarios.
+    // The '_' prefix is a naming convention for private fields in C#, though other conventions like 'm_' or no prefix are also common.
     private Bomb? _bomb;
     private Photon? _initialPhoton;
     private Photon? _upperPhoton;
@@ -117,13 +63,22 @@ public class QuantumExperiment
     private Detector? _detectorA;
     private Detector? _detectorB;
 
+    // Experiment state
+    private bool _isExperimentWithBomb;
+    private bool _didPhotonActuallyTakeLowerPath;
+
+    // Experiment trackers and utilities
+    private int _photonsArrivedCounter;
+    private DispatcherTimer? _waitForOtherPhotonTimer;
     private Canvas _canvas;
-    private Random _random = new Random();
+    private List<PhotonPath> _photonPaths;
+    private Random _random;
 
     public QuantumExperiment(Canvas canvas)
     {
         _canvas = canvas;
-        _recombinator = null;
+        _photonPaths = new List<PhotonPath>();
+        _random = new Random();
     }
 
     public void Reset()
@@ -149,37 +104,45 @@ public class QuantumExperiment
 
     public void Run(bool isExperimentWithBomb)
     {
+        // Reset the state of the experiment.
         Reset();
 
+        // Set the state of the experiment based on whether it includes the bomb or not.
         _isExperimentWithBomb = isExperimentWithBomb;
+
+        // Randomly decide if the photon takes the lower path.
         _didPhotonActuallyTakeLowerPath = _random.Next(2) == 0;
 
+        // Set up the initial entities and components for the experiment.
         AddPhotonSourceSymbol(new Point(INITIAL_PHOTON_X, INITIAL_PHOTON_Y));
 
         _initialPhoton = AddPhoton(new Point(INITIAL_PHOTON_X, INITIAL_PHOTON_Y), isInSuperposition: false);
         _beamSplitter = AddBeamSplitter(new Point(BEAM_SPLITTER_X, BEAM_SPLITTER_Y));
 
+        // If the experiment includes a bomb, add it. Randomly decide if it's a dud.
         if (_isExperimentWithBomb)
         {
             _bomb = AddBomb(isDud: _random.Next(2) == 0);
         }
 
+        // Add the remaining components for the experiment.
         _upperPathMirror = AddMirror(new Point(TOP_MIRROR_X, TOP_MIRROR_Y));
         _lowerPathMirror = AddMirror(new Point(BOTTOM_MIRROR_X, BOTTOM_MIRROR_Y));
         _recombinator = AddBeamSplitter(new Point(RECOMBINATOR_X, RECOMBINATOR_Y));
         _detectorA = AddDetector(new Point(DETECTOR_A_X, DETECTOR_A_Y), Colors.Green);
         _detectorB = AddDetector(new Point(DETECTOR_B_X, DETECTOR_B_Y), Colors.Red);
 
-        // TODO: Refactor to reduce nested callbacks using C# events for clarity.
+        // Begin the experiment by moving the initial photon towards the beam splitter.
         MoveInitialPhotonToBeamSplitter(() =>
         {
             Debug.WriteLine("Photon reached the beam splitter!");
 
-            // Replace the photon with two photons in a state of quantum superposition
+            // Once the photon reaches the beam splitter, it is replaced with two photons in quantum superposition.
             _initialPhoton.Kill();
             _upperPhoton = AddPhoton(new Point(BEAM_SPLITTER_X, BEAM_SPLITTER_Y), isInSuperposition: true);
             _lowerPhoton = AddPhoton(new Point(BEAM_SPLITTER_X, BEAM_SPLITTER_Y), isInSuperposition: true);
 
+            // Move the photon along the upper path.
             MoveUpperPhotonToMirror(() =>
             {
                 Debug.WriteLine("Upper photon reached the mirror!");
@@ -192,6 +155,7 @@ public class QuantumExperiment
                 });
             });
 
+            // If the experiment includes a bomb, move the photon along the lower path to interact with the bomb.
             if (_isExperimentWithBomb)
             {
                 MoveLowerPhotonToBomb(() =>
@@ -213,6 +177,7 @@ public class QuantumExperiment
             }
             else
             {
+                // If no bomb, simply move the photon along the lower path.
                 MoveLowerPhotonFromBeamSplitterToMirror(() =>
                 {
                     Debug.WriteLine("Lower photon reached the mirror!");
@@ -258,12 +223,14 @@ public class QuantumExperiment
     {
         if (_didPhotonActuallyTakeLowerPath && _bomb!.IsBombLive)
         {
+            // If the photon takes the lower path and the bomb is live, the bomb explodes.
             Debug.WriteLine("The bomb exploded!");
             _bomb.Kill();
             _lowerPhoton!.Kill();
             _upperPhoton!.Kill();
             _upperPhoton.IsDead = true;
 
+            // Update the visual representation to show that the upper photon path is now inactive.
             _canvas.Children.Remove(_photonPaths.Where(p => p.PathName == "upper").Last().Polyline);
             var polyline = _photonPaths.Where(p => p.PathName == "lower").Last().Polyline;
             polyline.Stroke = Brushes.Magenta;
@@ -272,6 +239,7 @@ public class QuantumExperiment
         }
         else
         {
+            // If the bomb doesn't explode, animate the photon moving from the bomb to the mirror.
             AnimatePhoton(_lowerPhoton!, _lowerPathMirror!.GetCentroid(), (_lowerPathMirror!.CentroidX - _bomb!.CentroidX) / PHOTON_VELOCITY, "lower", callback);
         }
     }
@@ -285,43 +253,41 @@ public class QuantumExperiment
     {
         _photonsArrivedCounter++;
 
-        if (_photonsArrivedCounter == 1) // First photon arrived
+        if (_photonsArrivedCounter == 1) 
         {
-            // NOTE: We set a 100 ms window to allow both photons to arrive at the recombinator beam splitter.
-            // The program will crash if this condition isn't satisfied.
+            // Handle the first photon's arrival at the recombinator.
+
+            // Ensure that both photons arrive closely synchronized. A 100ms window is set for this purpose.
             _waitForOtherPhotonTimer = new DispatcherTimer();
-            _waitForOtherPhotonTimer.Interval = TimeSpan.FromMilliseconds(100); // NOTE: We're using a 100 ms interval for the timer, which should be sufficient given a frame rate of 60 FPS. However, there's a potential for minor visual inconsistencies or "jankiness" due to this timing. Adjust as needed to improve smoothness if necessary.
-            _waitForOtherPhotonTimer.Tick += (sender, args) => throw new Exception("Only one photon arrived within the time frame!"); 
+            _waitForOtherPhotonTimer.Interval = TimeSpan.FromMilliseconds(100);
+
+            // If only one photon arrives within this window, an exception is thrown.
+            _waitForOtherPhotonTimer.Tick += (sender, args) => throw new Exception("Only one photon arrived at the recombinator within the time frame!"); 
             _waitForOtherPhotonTimer.Start();
         }
         else if (_photonsArrivedCounter == 2) // Second photon arrived
         {
+            // Handle the second photon's arrival.
+
             Debug.WriteLine("Both photons reached the recombinator!");
 
-            if (_waitForOtherPhotonTimer != null)
-            {
-                _waitForOtherPhotonTimer.Stop();
-                _waitForOtherPhotonTimer = null;
-            }
+            // Stop the timer, both photons have arrived.
+            _waitForOtherPhotonTimer?.Stop();
+            _waitForOtherPhotonTimer = null;
 
             if (_isExperimentWithBomb)
             {
                 _photonsArrivedCounter = 0;
 
-                // NOTE: When using a bomb, the photons' paths are uncertain until we observe the outcome at the detectors.
-                MoveLowerPhotonToDetectorA(() =>
-                {
-                    PhotonArrivedAtDetector();
-                });
-
-                MoveUpperPhotonToDetectorB(() =>
-                {
-                    PhotonArrivedAtDetector();
-                });
+                // In a bomb experiment, photon paths remain uncertain until detected.
+                MoveLowerPhotonToDetectorA(PhotonArrivedAtDetector);
+                MoveUpperPhotonToDetectorB(PhotonArrivedAtDetector);
             }
             else
             {
-                // NOTE: In the absence of a bomb, the photons consistently exhibit destructive interference towards detector B and constructive interference towards detector A (which is in their original direction).
+                // In the absence of a bomb, photons undergo specific interference patterns:
+                // - Destructive interference towards detector B
+                // - Constructive interference towards detector A
                 _upperPhoton!.Kill();
                 _lowerPhoton!.Kill();
 
@@ -355,35 +321,43 @@ public class QuantumExperiment
     {
         _photonsArrivedCounter++;
 
-        if (_photonsArrivedCounter == 1) // First photon arrived
+        if (_photonsArrivedCounter == 1)  
         {
-            // TODO: Make this DRY. Consider abstracting out the timer setup into a separate method, e.g., `SetupPhotonArrivalTimer()`.
+            // First photon arrival handling:
+
+            // Consider refactoring the timer setup into a dedicated method for clarity and to adhere to the DRY principle.
             _waitForOtherPhotonTimer = new DispatcherTimer();
-            _waitForOtherPhotonTimer.Interval = TimeSpan.FromMilliseconds(100); 
+            _waitForOtherPhotonTimer.Interval = TimeSpan.FromMilliseconds(100);
+
+            // Throw an exception if only one photon arrives within the stipulated time frame.
             _waitForOtherPhotonTimer.Tick += (sender, args) => throw new Exception("Only one photon arrived within the time frame!");
             _waitForOtherPhotonTimer.Start();
         }
         else if (_photonsArrivedCounter == 2) // Second photon arrived
         {
+            // Second photon arrival handling:
+
             Debug.WriteLine("Both photons reached the recombinator!");
 
-            if (_waitForOtherPhotonTimer != null)
-            {
-                _waitForOtherPhotonTimer.Stop();
-                _waitForOtherPhotonTimer = null;
-            }
+            // Disabling the timer since both photons have now arrived.
+            _waitForOtherPhotonTimer?.Stop();
+            _waitForOtherPhotonTimer = null;
 
             _upperPhoton!.Kill();
             _lowerPhoton!.Kill();
 
+            // Photon behavior is influenced by the bomb's state.
             if (_bomb!.IsBombLive == false)
             {
-                // With a dud bomb, the photon behaves as if there's no bomb, consistently getting detected at Detector A due to interference.
+                // In the case of a dud bomb, the photon behaves as if the bomb is absent and consistently gets detected at Detector A.
                 DetectedAtDetectorA();
             }
             else
             {
-                // With a live bomb on the upper path, detection is 50-50 between Detectors A and B. Detection at A is inconclusive about the bomb's state, while detection at B confirms it's live.
+                // For a live bomb in the upper path:
+                // - Detection at Detector A doesn't confirm the bomb's state.
+                // - Detection at Detector B conclusively confirms the bomb is live.
+                // Hence, there's a 50-50 detection between Detectors A and B.
                 if (_random.Next(2) == 0)
                 {
                     DetectedAtDetectorA();
@@ -412,6 +386,8 @@ public class QuantumExperiment
     private void DetectedAtDetectorB()
     {
         Debug.WriteLine("Detected at B, bomb is LIVE and didn't explode. Photon took the upper path, showcasing quantum behavior!");
+
+        // Update the visual representation to indicate the photon's path.
 
         _detectorB!.HasDetectedPhoton = true;
 
@@ -491,7 +467,7 @@ public class QuantumExperiment
             Fill = Brushes.Black
         };
 
-        Canvas.SetZIndex(bomb, 1); // Set it to a higher value to bring it to the foreground
+        Panel.SetZIndex(bomb, 1); // Set it to a higher value to bring it to the foreground
 
         return new Bomb(bomb, _canvas, BOMB_X, BOMB_Y, isDud);
     }
@@ -542,20 +518,12 @@ public class QuantumExperiment
         return new Detector(mirror, _canvas, centroid.X, centroid.Y, color);
     }
 
-    private struct PhotonPath
-    {
-        public string PathName { get; set; }
-        public Polyline Polyline { get; set; }
-    }
-
-    private List<PhotonPath> _photonPaths = new List<PhotonPath>();
-
     private void AnimatePhoton(Photon photon, Point targetPosition, double durationMilliseconds, string pathName, Action? onComplete = null)
     {
-        // This timer will fire every frame
+        // This timer will fire every frame. At 60.0 FPS, this is approximately one frame every 16.7 milliseconds.
         var timer = new DispatcherTimer
         {
-            Interval = TimeSpan.FromMilliseconds(1000.0 / 60.0) // 60 FPS
+            Interval = TimeSpan.FromMilliseconds(1000.0 / ANIMATION_FPS) 
         };
 
         Point startPosition = photon.GetCentroid();
@@ -574,41 +542,51 @@ public class QuantumExperiment
         
         _canvas.Children.Add(polyline);
 
+        // === TIMER TICK REGISTRATION START ===
         timer.Tick += (sender, args) =>
         {
+            // Check if the photon has been destroyed or is no longer active
             if (photon.IsDead)
             {
-                ((DispatcherTimer)sender!).Stop();
-                stopwatch.Stop();
+                ((DispatcherTimer)sender!).Stop(); // Stop the animation timer
+                stopwatch.Stop();                  // Stop the stopwatch
                 return;
             }
 
-            // Determine how far along the duration we are (clamped to 1)
+            // Calculate the proportion of the animation's total duration that has elapsed (capped at 1.0)
             double progress = Math.Min(1.0, stopwatch.ElapsedMilliseconds / durationMilliseconds);
 
+            // Calculate the photon's new position based on the progress
             double newX = startPosition.X + (targetPosition.X - startPosition.X) * progress;
             double newY = startPosition.Y + (targetPosition.Y - startPosition.Y) * progress;
 
-            // Move the photon to the current position
+            // TODO: Replace individual centroid assignments with a SetCentroid method for clarity and encapsulation.
             photon.CentroidX = newX;
             photon.CentroidY = newY;
 
-            // Add a new point to the Polyline at the photon's current position
+            // Append the photon's current position to the polyline
             var newPoint = new Point(newX, newY);
             polyline.Points.Add(newPoint);
 
-            // Stop the timer and the animation when we're done
+            // If the animation has completed (or exceeded its intended duration)
             if (progress >= 1.0)
             {
-                ((DispatcherTimer)sender!).Stop();
-                stopwatch.Stop();
+                ((DispatcherTimer)sender!).Stop(); // Stop the animation timer
+                stopwatch.Stop();                  // Stop the stopwatch
 
-                onComplete?.Invoke(); // Notify that the animation is complete
+                onComplete?.Invoke(); // Signal that the animation has finished
             }
         };
+        // === TIMER TICK REGISTRATION END ===
 
-        stopwatch.Start();
-        timer.Start();
+        // Note: The order between the TIMER TICK REGISTRATION block and the TIMER & STOPWATCH STARTING SECTION 
+        // does not affect the behavior of the code. This illustrates the asynchronous nature of the DispatcherTimer 
+        // and how event subscriptions work in C#.
+
+        // === TIMER & STOPWATCH STARTING SECTION START ===
+        stopwatch.Start(); // Start measuring elapsed time for animation progress.
+        timer.Start();     // Start the timer, which will trigger the Tick event based on the defined interval.
+        // === TIMER & STOPWATCH STARTING SECTION END ===
     }
 
     private class RenderableEntity
@@ -719,7 +697,7 @@ public class QuantumExperiment
         }
     }
 
-    // TODO: Refactor Detector to manage both lightened and original colors internally for clarity.
+    // TODO: Manage both lightened and original colors within the `Detector` class.
     private class Detector : RenderableEntity
     {
         private Color _color;
