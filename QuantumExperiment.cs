@@ -286,8 +286,9 @@ public class QuantumExperiment
             else
             {
                 // In the absence of a bomb, photons undergo specific interference patterns:
-                // - Destructive interference towards detector B
-                // - Constructive interference towards detector A
+                // - Destructive interference towards detector B (therefore, no photon detected)
+                // - Constructive interference towards detector A (photon will be detected at A)
+                
                 _upperPhoton!.Kill();
                 _lowerPhoton!.Kill();
 
